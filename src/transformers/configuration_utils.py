@@ -308,6 +308,9 @@ class PretrainedConfig(PushToHubMixin):
         self.exponential_decay_length_penalty = kwargs.pop("exponential_decay_length_penalty", None)
         self.suppress_tokens = kwargs.pop("suppress_tokens", None)
         self.begin_suppress_tokens = kwargs.pop("begin_suppress_tokens", None)
+        
+        # Parameters for enforcing syntax adherence of output
+        self.enforce_json = kwargs.pop("enforce_json", None)
 
         # Fine-tuning task arguments
         self.architectures = kwargs.pop("architectures", None)

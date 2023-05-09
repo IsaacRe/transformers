@@ -3,6 +3,7 @@ import warnings
 
 from .. import MODEL_FOR_CAUSAL_LM_MAPPING, TF_MODEL_FOR_CAUSAL_LM_MAPPING
 from ..utils import add_end_docstrings, is_tf_available
+from ..generation.output_validity import validity_check
 from .base import PIPELINE_INIT_ARGS, Pipeline
 
 
@@ -116,6 +117,7 @@ class TextGenerationPipeline(Pipeline):
 
             if "min_length" in generate_kwargs:
                 generate_kwargs["min_length"] += prefix_length
+        output_validity_check = validity_check(self.tokenizer, generate_kwargs)
         if handle_long_generation is not None:
             if handle_long_generation not in {"hole"}:
                 raise ValueError(
@@ -142,6 +144,8 @@ class TextGenerationPipeline(Pipeline):
             postprocess_params["return_type"] = return_type
         if clean_up_tokenization_spaces is not None:
             postprocess_params["clean_up_tokenization_spaces"] = clean_up_tokenization_spaces
+        if output_validity_check:
+            forward_params["output_validity_check"] = output_validity_check
 
         if stop_sequence is not None:
             stop_sequence_ids = self.tokenizer.encode(stop_sequence, add_special_tokens=False)

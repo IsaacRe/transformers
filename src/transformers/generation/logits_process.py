@@ -19,10 +19,11 @@ from typing import Callable, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
+#import scs_re
 
 from ..utils import add_start_docstrings
 from ..utils.logging import get_logger
-
+from .output_validity import SyntaxValidityCheckHandler
 
 logger = get_logger(__name__)
 
@@ -978,5 +979,24 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
             max_text_token_logprob = logprobs[k, : self.timestamp_begin].max()
             if timestamp_logprob > max_text_token_logprob:
                 scores[k, : self.timestamp_begin] = -float("inf")
+
+        return scores
+
+
+class SyntaxEnforcingLogitsProcessor(LogitsProcessor):
+
+    def __init__(self, validity_check: SyntaxValidityCheckHandler):
+        self.validity_check = validity_check
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor):
+        all_suppressed = torch.zeros_like(scores).fill_(-float("inf"))
+        for batch_idx, vocab_idx, suppress in self.validity_check.await_invalid_next_tokens():
+            if suppress:
+                scores[batch_idx, vocab_idx] = -float("inf")
+            else:
+                all_suppressed[batch_idx, vocab_idx] = scores[batch_idx, vocab_idx]
+        
+        if not suppress:
+            scores[:] = all_suppressed
 
         return scores

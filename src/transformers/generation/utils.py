@@ -58,6 +58,7 @@ from .logits_process import (
     RepetitionPenaltyLogitsProcessor,
     SuppressTokensAtBeginLogitsProcessor,
     SuppressTokensLogitsProcessor,
+    SyntaxEnforcingLogitsProcessor,
     TemperatureLogitsWarper,
     TopKLogitsWarper,
     TopPLogitsWarper,
@@ -70,6 +71,7 @@ from .stopping_criteria import (
     StoppingCriteriaList,
     validate_stopping_criteria,
 )
+from .output_validity import SyntaxValidityCheckHandler
 
 
 if TYPE_CHECKING:
@@ -828,6 +830,7 @@ class GenerationMixin:
         encoder_input_ids: torch.LongTensor,
         prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], List[int]],
         logits_processor: Optional[LogitsProcessorList],
+        output_validity_check: Optional[SyntaxValidityCheckHandler],
     ) -> LogitsProcessorList:
         """
         This class returns a [`LogitsProcessorList`] list object that contains all relevant [`LogitsProcessor`]
@@ -932,6 +935,8 @@ class GenerationMixin:
             )
         if generation_config.forced_decoder_ids is not None:
             processors.append(ForceTokensLogitsProcessor(generation_config.forced_decoder_ids))
+        if output_validity_check:
+            processors.append(SyntaxEnforcingLogitsProcessor(output_validity_check))
         processors = self._merge_criteria_processor_list(processors, logits_processor)
         # `LogitNormalization` should always be the last logit processor, when present
         if generation_config.renormalize_logits is True:
@@ -1151,6 +1156,7 @@ class GenerationMixin:
         synced_gpus: Optional[bool] = None,
         assistant_model: Optional["PreTrainedModel"] = None,
         streamer: Optional["BaseStreamer"] = None,
+        output_validity_check: Optional[SyntaxValidityCheckHandler] = None,
         **kwargs,
     ) -> Union[GenerateOutput, torch.LongTensor]:
         r"""
@@ -1233,6 +1239,7 @@ class GenerationMixin:
                     - [`~generation.BeamSearchEncoderDecoderOutput`],
                     - [`~generation.BeamSampleEncoderDecoderOutput`]
         """
+        print("in generate")
 
         if synced_gpus is None:
             if is_deepspeed_zero3_enabled() and dist.get_world_size() > 1:
@@ -1457,6 +1464,7 @@ class GenerationMixin:
             encoder_input_ids=inputs_tensor,
             prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
             logits_processor=logits_processor,
+            output_validity_check=output_validity_check,
         )
 
         # 9. prepare stopping criteria
@@ -1464,7 +1472,11 @@ class GenerationMixin:
             generation_config=generation_config, stopping_criteria=stopping_criteria
         )
         # 10. go into different generation modes
+        is_constraint_gen_mode = is_contrastive_search_gen_mode = is_greedy_gen_mode = is_beam_gen_mode = is_beam_sample_gen_mode = is_group_beam_gen_mode = is_assisted_gen_mode = False
+        is_sample_gen_mode = True
+
         if is_assisted_gen_mode:
+            print("\nGenerating with assisted generation\n")
             if generation_config.num_return_sequences > 1:
                 raise ValueError(
                     "num_return_sequences has to be 1 when doing assisted generate, "
@@ -1503,6 +1515,7 @@ class GenerationMixin:
                 **model_kwargs,
             )
         if is_greedy_gen_mode:
+            print("\nGenerating with greedy search\n")
             if generation_config.num_return_sequences > 1:
                 raise ValueError(
                     "num_return_sequences has to be 1 when doing greedy search, "
@@ -1524,6 +1537,7 @@ class GenerationMixin:
             )
 
         elif is_contrastive_search_gen_mode:
+            print("\nGenerating with contrastive search\n")
             if generation_config.num_return_sequences > 1:
                 raise ValueError(
                     "num_return_sequences has to be 1 when doing contrastive search, "
@@ -1548,6 +1562,7 @@ class GenerationMixin:
             )
 
         elif is_sample_gen_mode:
+            print("\nGenerating with sample\n")
             # 11. prepare logits warper
             logits_warper = self._get_logits_warper(generation_config)
 
@@ -1571,10 +1586,12 @@ class GenerationMixin:
                 return_dict_in_generate=generation_config.return_dict_in_generate,
                 synced_gpus=synced_gpus,
                 streamer=streamer,
+                output_validity_check=output_validity_check,
                 **model_kwargs,
             )
 
         elif is_beam_gen_mode:
+            print("\nGenerating with beam search\n")
             if generation_config.num_return_sequences > generation_config.num_beams:
                 raise ValueError("`num_return_sequences` has to be smaller or equal to `num_beams`.")
 
@@ -1613,6 +1630,7 @@ class GenerationMixin:
             )
 
         elif is_beam_sample_gen_mode:
+            print("\nGenerating with beam sample\n")
             # 11. prepare logits warper
             logits_warper = self._get_logits_warper(generation_config)
 
@@ -1652,6 +1670,7 @@ class GenerationMixin:
             )
 
         elif is_group_beam_gen_mode:
+            print("\nGenerating with grouped beam search\n")
             if generation_config.num_return_sequences > generation_config.num_beams:
                 raise ValueError("`num_return_sequences` has to be smaller or equal to `num_beams`.")
 
@@ -1698,6 +1717,7 @@ class GenerationMixin:
             )
 
         elif is_constraint_gen_mode:
+            print("\nGenerating with constrained beam search\n")
             if generation_config.num_return_sequences > generation_config.num_beams:
                 raise ValueError("`num_return_sequences` has to be smaller or equal to `num_beams`.")
 
@@ -1802,6 +1822,7 @@ class GenerationMixin:
         return_dict_in_generate: Optional[bool] = None,
         synced_gpus: bool = False,
         streamer: Optional["BaseStreamer"] = None,
+        output_validity_check: Optional[SyntaxValidityCheckHandler] = None,
         **model_kwargs,
     ) -> Union[ContrastiveSearchOutput, torch.LongTensor]:
         r"""
@@ -2109,6 +2130,10 @@ class GenerationMixin:
                 if pad_token_id is None:
                     raise ValueError("If `eos_token_id` is defined, make sure that `pad_token_id` is defined.")
                 next_tokens = next_tokens * unfinished_sequences + pad_token_id * (1 - unfinished_sequences)
+
+            # update validity checker
+            if output_validity_check:
+                output_validity_check.update(next_tokens)
 
             # update generated ids, model inputs, and length for next step
             input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
@@ -2433,6 +2458,7 @@ class GenerationMixin:
         return_dict_in_generate: Optional[bool] = None,
         synced_gpus: bool = False,
         streamer: Optional["BaseStreamer"] = None,
+        output_validity_check: Optional[SyntaxValidityCheckHandler] = None,
         **model_kwargs,
     ) -> Union[SampleOutput, torch.LongTensor]:
         r"""
@@ -2641,15 +2667,32 @@ class GenerationMixin:
                         else (outputs.hidden_states,)
                     )
 
+
+            print(f"max_length: {max_length}")
+
             # sample
             probs = nn.functional.softmax(next_token_scores, dim=-1)
             next_tokens = torch.multinomial(probs, num_samples=1).squeeze(1)
 
+
+            print(f"next token scores shape: {next_token_scores.shape}")
+            print(f"probs shape: {probs.shape}")
+
             # finished sentences should have their next token be a padding token
             if eos_token_id is not None:
+                print(f"pad_token: {pad_token_id}")
+                print(f"unfinished_seq: {unfinished_sequences}")
+                print(f"next_tokens (pre-pad): {next_tokens}")
                 if pad_token_id is None:
                     raise ValueError("If `eos_token_id` is defined, make sure that `pad_token_id` is defined.")
                 next_tokens = next_tokens * unfinished_sequences + pad_token_id * (1 - unfinished_sequences)
+
+            # update validity checker
+            if output_validity_check:
+                output_validity_check.update([t.item() for t in next_tokens])
+                print(output_validity_check._active_checks[0].parser.get_parsed())
+            else:
+                print("skipped output syntax enforcement")
 
             # update generated ids, model inputs, and length for next step
             input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
@@ -2671,6 +2714,7 @@ class GenerationMixin:
 
             # stop if we exceed the maximum length
             if stopping_criteria(input_ids, scores):
+                print("STOPPING gen")
                 this_peer_finished = True
 
             if this_peer_finished and not synced_gpus:
