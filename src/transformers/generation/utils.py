@@ -2667,22 +2667,11 @@ class GenerationMixin:
                         else (outputs.hidden_states,)
                     )
 
-
-            print(f"max_length: {max_length}")
-
-            # sample
             probs = nn.functional.softmax(next_token_scores, dim=-1)
             next_tokens = torch.multinomial(probs, num_samples=1).squeeze(1)
 
-
-            print(f"next token scores shape: {next_token_scores.shape}")
-            print(f"probs shape: {probs.shape}")
-
             # finished sentences should have their next token be a padding token
             if eos_token_id is not None:
-                print(f"pad_token: {pad_token_id}")
-                print(f"unfinished_seq: {unfinished_sequences}")
-                print(f"next_tokens (pre-pad): {next_tokens}")
                 if pad_token_id is None:
                     raise ValueError("If `eos_token_id` is defined, make sure that `pad_token_id` is defined.")
                 next_tokens = next_tokens * unfinished_sequences + pad_token_id * (1 - unfinished_sequences)
@@ -2690,9 +2679,6 @@ class GenerationMixin:
             # update validity checker
             if output_validity_check:
                 output_validity_check.update([t.item() for t in next_tokens])
-                print(output_validity_check._active_checks[0].parser.get_parsed())
-            else:
-                print("skipped output syntax enforcement")
 
             # update generated ids, model inputs, and length for next step
             input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
