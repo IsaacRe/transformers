@@ -204,8 +204,16 @@ class LlamaAttention(nn.Module):
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
         # [bsz, nh, t, hd]
+        
+        print("key", key_states.shape)
+        print("value", value_states.shape)
+
+        if position_ids is not None:
+            print("position_ids", position_ids.shape)
 
         if past_key_value is not None:
+            print("past_key", past_key_value[0].shape)
+            print("past_value", past_key_value[1].shape)
             # reuse k, v, self_attention
             key_states = torch.cat([past_key_value[0], key_states], dim=2)
             value_states = torch.cat([past_key_value[1], value_states], dim=2)
