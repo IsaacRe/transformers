@@ -779,11 +779,13 @@ class Pipeline(_ScikitCompat):
         device: Union[int, "torch.device"] = None,
         torch_dtype: Optional[Union[str, "torch.dtype"]] = None,
         binary_output: bool = False,
+        stream: bool = False,
         **kwargs,
     ):
         if framework is None:
             framework, model = infer_framework_load_model(model, config=model.config)
 
+        self.stream = stream
         self.task = task
         self.model = model
         self.tokenizer = tokenizer
@@ -1204,7 +1206,7 @@ class ChunkPipeline(Pipeline):
         feature_extractor = self.feature_extractor if self.feature_extractor is not None else self.image_processor
         collate_fn = no_collate_fn if batch_size == 1 else pad_collate_fn(self.tokenizer, feature_extractor)
         dataloader = DataLoader(dataset, num_workers=num_workers, batch_size=batch_size, collate_fn=collate_fn)
-        model_iterator = PipelinePackIterator(dataloader, self.forward, forward_params, loader_batch_size=batch_size)
+        model_iterator = PipelinePackIterator(dataloader, self.forward, forward_params, loader_batch_size=batch_size, stream=self.stream)
         final_iterator = PipelineIterator(model_iterator, self.postprocess, postprocess_params)
         return final_iterator
 

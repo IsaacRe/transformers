@@ -239,6 +239,10 @@ class PipelinePackIterator(PipelineIterator):
             yield infer(item, **params)
     ```"""
 
+    def __init__(self, loader, infer, params, loader_batch_size=None, stream=False):
+        self.stream = stream
+        super().__init__(loader, infer, params, loader_batch_size)
+
     def __iter__(self):
         self.iterator = iter(self.loader)
         return self
@@ -258,6 +262,8 @@ class PipelinePackIterator(PipelineIterator):
             while self._loader_batch_index < self.loader_batch_size:
                 item = self.loader_batch_item()
                 is_last = item.pop("is_last")
+                if self.stream:
+                    return [item]
                 accumulator.append(item)
                 if is_last:
                     return accumulator
@@ -283,12 +289,16 @@ class PipelinePackIterator(PipelineIterator):
                 while self._loader_batch_index < self.loader_batch_size:
                     item = self.loader_batch_item()
                     is_last = item.pop("is_last")
+                    if self.stream:
+                        return [item]
                     accumulator.append(item)
                     if is_last:
                         return accumulator
             else:
                 item = processed
                 is_last = item.pop("is_last")
+                if self.stream:
+                    return [item]
                 accumulator.append(item)
         return accumulator
 
