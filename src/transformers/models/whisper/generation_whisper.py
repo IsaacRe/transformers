@@ -819,7 +819,11 @@ class WhisperGenerationMixin:
                 if key == "past_key_values":
                     # we don't save `past_key_values` as this is too costly
                     return None
-                return values[batch_idx].cpu()
+                try:
+                    return values[batch_idx].cpu()
+                except Exception as e:
+                    print(key, values[batch_idx])
+                    raise e
 
             sequence_tokens = seek_outputs["sequences"]
             seek_outputs = [
