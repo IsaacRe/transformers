@@ -458,6 +458,8 @@ class WhisperGenerationMixin:
         ```
 
         """
+        print(kwargs.get('num_frames'))
+
         # 0. deprecate old inputs
         if "inputs" in kwargs:
             input_features = kwargs.pop("inputs")
@@ -551,6 +553,7 @@ class WhisperGenerationMixin:
             )
 
             if generation_config.return_token_timestamps and hasattr(generation_config, "alignment_heads"):
+                print(f'final1: {generation_config.num_frames}')
                 outputs["token_timestamps"] = self._extract_token_timestamps(
                     outputs, generation_config.alignment_heads, num_frames=generation_config.num_frames
                 )
@@ -806,6 +809,7 @@ class WhisperGenerationMixin:
 
     def _postprocess_outputs(self, seek_outputs, return_token_timestamps, generation_config):
         if return_token_timestamps and hasattr(generation_config, "alignment_heads"):
+            print(f'final2: {getattr(generation_config, "num_frames", None)}')
             num_frames = getattr(generation_config, "num_frames", None)
             seek_outputs["token_timestamps"] = self._extract_token_timestamps(
                 seek_outputs, generation_config.alignment_heads, num_frames=num_frames
@@ -1131,6 +1135,7 @@ class WhisperGenerationMixin:
                     "See https://gist.github.com/hollance/42e32852f24243b748ae6bc1f985b13a on how to add this property to the generation config."
                 )
 
+            print(kwargs.get('num_frames'))
             generation_config.num_frames = kwargs.pop("num_frames", None)
 
     @staticmethod
