@@ -577,6 +577,8 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                     stride_left /= sampling_rate
                     stride_right /= sampling_rate
                     output["stride"] = chunk_len, stride_left, stride_right
+                    if output.get("stride_offset") is not None:
+                        output["stride_offset"] /= sampling_rate
 
             text, optional = self.tokenizer._decode_asr(
                 model_outputs,

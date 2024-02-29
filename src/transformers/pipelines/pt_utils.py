@@ -241,6 +241,7 @@ class PipelinePackIterator(PipelineIterator):
 
     def __init__(self, loader, infer, params, loader_batch_size=None, stream=False):
         self.stream = stream
+        self.stride_offset = 0
         super().__init__(loader, infer, params, loader_batch_size)
 
     def __iter__(self):
@@ -263,7 +264,12 @@ class PipelinePackIterator(PipelineIterator):
                 item = self.loader_batch_item()
                 is_last = item.pop("is_last")
                 if self.stream:
-                    return [item]
+                    item["stride_offset"] = self.stride_offset
+                    chunk_len, stride_left, stride_right = item["stride"]
+                    self.stride_offset += chunk_len - stride_left - stride_right
+                    if is_last:
+                        self.stride_offset = 0
+                    return [item]  # return last to items for chunk-edge alignment
                 accumulator.append(item)
                 if is_last:
                     return accumulator
@@ -290,7 +296,12 @@ class PipelinePackIterator(PipelineIterator):
                     item = self.loader_batch_item()
                     is_last = item.pop("is_last")
                     if self.stream:
-                        return [item]
+                        item["stride_offset"] = self.stride_offset
+                        chunk_len, stride_left, stride_right = item["stride"]
+                        self.stride_offset += chunk_len - stride_left - stride_right
+                        if is_last:
+                            self.stride_offset = 0
+                        return [item]  # return last to items for chunk-edge alignment
                     accumulator.append(item)
                     if is_last:
                         return accumulator
@@ -298,7 +309,12 @@ class PipelinePackIterator(PipelineIterator):
                 item = processed
                 is_last = item.pop("is_last")
                 if self.stream:
-                    return [item]
+                    item["stride_offset"] = self.stride_offset
+                    chunk_len, stride_left, stride_right = item["stride"]
+                    self.stride_offset += chunk_len - stride_left - stride_right
+                    if is_last:
+                        self.stride_offset = 0
+                    return [item]  # return last to items for chunk-edge alignment
                 accumulator.append(item)
         return accumulator
 

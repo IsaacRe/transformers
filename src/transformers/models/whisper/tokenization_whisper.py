@@ -891,6 +891,8 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
     chunks = []
     chunk = new_chunk()
     time_offset = 0.0
+    if len(model_outputs) > 0:
+        time_offset = model_outputs[0].get("stride_offset", 0.0)
     timestamp_begin = tokenizer.convert_tokens_to_ids("<|notimestamps|>") + 1
     previous_tokens = []
     previous_token_timestamps = []
