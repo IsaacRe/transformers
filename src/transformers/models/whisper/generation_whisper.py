@@ -472,7 +472,7 @@ class WhisperGenerationMixin:
             generation_config = copy.deepcopy(generation_config)
 
         # 2. set global generate variables
-        input_stride = self.model.encoder.conv1.stride[0] * self.model.encoder.conv2.stride[0]
+        input_stride = getattr(self, "input_stride", self.model.encoder.conv1.stride[0] * self.model.encoder.conv2.stride[0])
         num_segment_frames = input_stride * self.config.max_source_positions
         total_input_frames = self._retrieve_total_input_frames(
             input_features=input_features, input_stride=input_stride, kwargs=kwargs
